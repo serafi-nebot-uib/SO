@@ -1,2 +1,6 @@
 .DS_Store
 .localized
+**/*.o
+**/test1
+**/test2a
+**/test2b

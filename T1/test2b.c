@@ -149,7 +149,9 @@ int main() {
     len2 = my_stack_len(s2);
     occupied_bytes = len2*(sizeof(struct my_stack_node)+size1) + sizeof (struct my_stack);
     printf ("\nWhole stack space s2: %d bytes\n", occupied_bytes);
-    if (occupied_bytes != my_stack_purge(s2)) {
+	int s = my_stack_purge(s2);
+	printf("len2: %d, size: %d, occupied_bytes: %d -> purge: %d\n", len2, s2->size, occupied_bytes, s);
+    if (occupied_bytes != s) {
         fprintf(stderr, ROJO "Error purging s2\n" RESET);
         exit(EXIT_FAILURE);
     }

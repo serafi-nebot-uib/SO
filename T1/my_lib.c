@@ -1,4 +1,5 @@
 #include "my_lib.h"
+#include <sys/fcntl.h>
 
 size_t my_strlen(const char *str) {
 	size_t i = 0;
@@ -80,11 +81,32 @@ int my_stack_purge(struct my_stack *stack) {
 		stack->top = stack->top->next;
 		free(tmp);
 	}
-	return i * stack->size;
+	free(stack);
+	return i * (stack->size + sizeof(struct my_stack_node)) + sizeof(struct my_stack);
 }
 
 struct my_stack *my_stack_read(char *filename) {
-	return 0;
+	if (filename == NULL) return NULL;
+
+	int fd = open(filename, O_RDONLY);
+	if (fd < 0) return NULL;
+
+	int size = 0;
+	int r = read(fd, &size, sizeof(size));
+	if (r <= 0 || size < 0) return NULL;
+
+	struct my_stack *stack = my_stack_init(size);
+	void *buff = malloc(size);
+	if (buff == NULL) return NULL;
+	while (read(fd, buff, size) == size) {
+		void *data = malloc(size);
+		memcpy(data, buff, size);
+		my_stack_push(stack, data);
+	}
+
+	free(buff);
+
+	return stack;
 }
 
 int my_stack_write(struct my_stack *stack, char *filename) {
@@ -109,9 +131,10 @@ int my_stack_write(struct my_stack *stack, char *filename) {
 
 	int i = 0;
 	for (; aux->top != NULL; i++) {
+		// write fail check
 		write(fd, aux->top->data, aux->size);
 		void *tmp = aux->top;
-		node = aux->top->next;
+		aux->top = aux->top->next;
 		free(tmp);
 	}
 
