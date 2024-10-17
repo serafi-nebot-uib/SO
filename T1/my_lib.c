@@ -42,6 +42,7 @@ char *my_strchr(const char *s, int c) {
 struct my_stack *my_stack_init(int size) {
 	struct my_stack *stack = (struct my_stack *)malloc(size);
 	stack->size = size;
+	stack->top = NULL;
 	return stack;
 }
 
@@ -81,8 +82,10 @@ int my_stack_purge(struct my_stack *stack) {
 		stack->top = stack->top->next;
 		free(tmp);
 	}
+	// calculate size before freeing the stack pointer
+	int size = i * (stack->size + sizeof(struct my_stack_node)) + sizeof(struct my_stack);
 	free(stack);
-	return i * (stack->size + sizeof(struct my_stack_node)) + sizeof(struct my_stack);
+	return size;
 }
 
 struct my_stack *my_stack_read(char *filename) {
