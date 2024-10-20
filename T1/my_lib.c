@@ -1,6 +1,8 @@
 #include "my_lib.h"
 #include <sys/fcntl.h>
 
+int errno;
+
 size_t my_strlen(const char *str) {
 	size_t i = 0;
 	for (; str[i]; i++);
@@ -41,6 +43,10 @@ char *my_strchr(const char *s, int c) {
 
 struct my_stack *my_stack_init(int size) {
 	struct my_stack *stack = (struct my_stack *)malloc(size);
+	if (stack == NULL) {
+		fprintf(stderr, "Error al reservar memoria para la inicialización del stack\n");
+		return NULL;
+	}
 	stack->size = size;
 	stack->top = NULL;
 	return stack;
@@ -49,7 +55,10 @@ struct my_stack *my_stack_init(int size) {
 int my_stack_push(struct my_stack *stack, void *data) {
 	if (stack == NULL || stack->size <= 0) return -1;
 	struct my_stack_node *node = (struct my_stack_node *)malloc(sizeof(struct my_stack_node));
-	if (node == NULL) return -1;
+	if (node == NULL) {
+		fprintf(stderr, "Error al reservar memoria para la inicialización del nodo\n");
+		return -1;
+	}
 	node->data = data;
 	node->next = stack->top;
 	stack->top = node;
@@ -92,24 +101,54 @@ struct my_stack *my_stack_read(char *filename) {
 	if (filename == NULL) return NULL;
 
 	int fd = open(filename, O_RDONLY);
-	if (fd < 0) return NULL;
+	if (fd < 0) {
+		fprintf(stderr, "Error al abrir el archivo \"%s\": %s\n", filename, strerror(errno));
+		return NULL;
+	}
 
 	int size = 0;
-	int r = read(fd, &size, sizeof(size));
-	if (r <= 0 || size < 0) return NULL;
+	ssize_t r = read(fd, &size, sizeof(size));
+	if (r <= 0 || size < 0) {
+		fprintf(stderr, "Error al leer el archivo \"%s\": %s\n", filename, strerror(errno));
+		if (close(fd) < 0) fprintf(stderr, "Error al cerrar el archivo \"%s\": %s\n", filename, strerror(errno));
+		return NULL;
+	}
 
 	struct my_stack *stack = my_stack_init(size);
+	if (stack == NULL) return NULL;
 	void *buff = malloc(size);
-	if (buff == NULL) return NULL;
-	while (read(fd, buff, size) == size) {
+	if (buff == NULL) {
+		fprintf(stderr, "Error al reservar memoria para los datos del nodo: %s\n", strerror(errno));
+		return NULL;
+	}
+
+	char success = 1;
+	while ((r = read(fd, buff, size)) == size) {
 		void *data = malloc(size);
+		if (data == NULL) {
+			fprintf(stderr, "Error al reservar memoria para los datos del nodo: %s\n", strerror(errno));
+			success = 0;
+			break;
+		}
 		memcpy(data, buff, size);
-		my_stack_push(stack, data);
+		if (my_stack_push(stack, data) < 0) {
+			success = 0;
+			break;
+		}
+	}
+
+	if (r < 0) {
+		fprintf(stderr, "Error al leer el archivo \"%s\": %s\n", filename, strerror(errno));
+		success = 0;
 	}
 
 	free(buff);
+	if (close(fd) < 0) fprintf(stderr, "Error al cerrar el archivo \"%s\": %s\n", filename, strerror(errno));
 
-	return stack;
+	if (success) return stack;
+
+	my_stack_purge(stack);
+	return NULL;
 }
 
 int my_stack_write(struct my_stack *stack, char *filename) {
@@ -141,6 +180,6 @@ int my_stack_write(struct my_stack *stack, char *filename) {
 		free(tmp);
 	}
 
-	close(fd);
+	if (close(fd) < 0) fprintf(stderr, "Error al cerrar el archivo \"%s\": %s\n", filename, strerror(errno));
 	return i;
 }
