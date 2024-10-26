@@ -11,7 +11,7 @@ int errno;
  * Argumentos:
  *    const char *str: puntero a la cadena de carácteres
  *
- * Devuelve: Entero indicando la cantidad de carácteres dentro del string
+ * Devuelve: entero indicando la cantidad de carácteres dentro del string
  */
 size_t my_strlen(const char *str) {
 	size_t i = 0;
@@ -27,7 +27,7 @@ size_t my_strlen(const char *str) {
  *    const char *str1: puntero a la cadena de carácteres 1
  *    const char *str2: puntero a la cadena de carácteres 2
  *
- * Devuelve: Entero indicando si str1 es mayor (>0), menor (<0) o igual (==0) a str2
+ * Devuelve: entero indicando si str1 es mayor (>0), menor (<0) o igual (==0) a str2
  */
 int my_strcmp(const char *str1, const char *str2) {
 	size_t i = 0;
@@ -45,7 +45,7 @@ int my_strcmp(const char *str1, const char *str2) {
  *    char *dest: puntero a la cadena de carácteres de destino (dónde se van a copiar los datos)
  *    char *src: puntero a la cadena de carácteres de origen (de dónde se copian los datos)
  *
- * Devuelve: Puntero a la cadena de carácteres de destino
+ * Devuelve: puntero a la cadena de carácteres de destino
  */
 char *my_strcpy(char *dest, const char *src) {
 	size_t i = 0;
@@ -65,7 +65,7 @@ char *my_strcpy(char *dest, const char *src) {
  *    char *src: puntero a la cadena de carácteres de origen (de dónde se copian los datos)
  *    size_t n: número límite de carácteres a copiar
  *
- * Devuelve: Puntero a la cadena de carácteres de destino
+ * Devuelve: puntero a la cadena de carácteres de destino
  */
 char *my_strncpy(char *dest, const char *src, size_t n) {
 	size_t l = my_strlen(src);
@@ -82,7 +82,7 @@ char *my_strncpy(char *dest, const char *src, size_t n) {
  *    char *dest: puntero a la cadena de carácteres a la que se va a concatenar
  *    char *src: puntero a la cadena de carácteres que se van a concatenar
  *
- * Devuelve: Puntero a la cadena dónde se han concatenado los carácteres
+ * Devuelve: puntero a la cadena dónde se han concatenado los carácteres
  */
 char *my_strcat(char *dest, const char *src) {
 	size_t off = my_strlen(dest); // obtener el índice a partir del cual vamos a copiar src
@@ -100,7 +100,7 @@ char *my_strcat(char *dest, const char *src) {
  *    const char *s: puntero a la cadena de carácteres dónde buscar
  *    int c: carácter que buscar
  *
- * Devuelve: Puntero a la primera occurrencia del carácter indicado o NULL en caso de que el carácter no esté dentro de la cadena
+ * Devuelve: puntero a la primera occurrencia del carácter indicado o NULL en caso de que el carácter no esté dentro de la cadena
  */
 char *my_strchr(const char *s, int c) {
 	// iterar la cadena hasta llegar al final (byte nulo)
@@ -116,7 +116,7 @@ char *my_strchr(const char *s, int c) {
  * Argumentos:
  *    int size: tamaño en bytes de datos para cada nodo
  *
- * Devuelve: Puntero al struct my_stack inicializado. NULL en caso de error.
+ * Devuelve: puntero al struct my_stack inicializado. NULL en caso de error.
  */
 struct my_stack *my_stack_init(int size) {
 	struct my_stack *stack = (struct my_stack *)malloc(sizeof(struct my_stack));
@@ -221,7 +221,7 @@ int my_stack_purge(struct my_stack *stack) {
 
 /*
  * my_stack_read
- * Cargar datos de la pila desde un fichero.
+ * Carga datos de la pila desde un fichero.
  *
  * Argumentos:
  *     char *filename: ruta del fichero del cual se van a cargar los datos
@@ -240,57 +240,73 @@ struct my_stack *my_stack_read(char *filename) {
 
 	// leer el campo size (primer campo dentro del archivo) que va a determinar el tamaño de datos de cada nodo
 	int size = 0;
-	ssize_t r = read(fd, &size, sizeof(size));
-	// comprobar si hay un error de lectura (r <= 0) o si el valor leído es incorrecto
-	if (r <= 0 || size < 0) {
+	ssize_t cnt = read(fd, &size, sizeof(size));
+	// comprobar si hay un error de lectura (cnt <= 0) o si el valor leído es incorrecto
+	if (cnt <= 0 || size < 0) {
 		fprintf(stderr, "Error al leer el archivo \"%s\": %s\n", filename, strerror(errno));
 		// cerrar el archivo antes de terminar la ejecución
 		if (close(fd) < 0) fprintf(stderr, "Error al cerrar el archivo \"%s\": %s\n", filename, strerror(errno));
 		return NULL;
 	}
 
+	char success = 1; // indica si el proceso se ha realizado correctamente
+	void *buff = malloc(size); // buffer dónde se van a escribir los datos leídos del archivo
 	// inicializar stack dónde se van a guardar los datos leídos del archivo
 	struct my_stack *stack = my_stack_init(size);
-	if (stack == NULL) return NULL;
-	void *buff = malloc(size);
-	if (buff == NULL) {
-		fprintf(stderr, "Error al reservar memoria para los datos del nodo: %s\n", strerror(errno));
-		return NULL;
-	}
-
-	char success = 1;
-	while ((r = read(fd, buff, size)) == size) {
-		void *data = malloc(size);
-		if (data == NULL) {
-			fprintf(stderr, "Error al reservar memoria para los datos del nodo: %s\n", strerror(errno));
+	if (stack != NULL) {
+		if (buff != NULL) {
+			// crear nodos mientras haya datos a leer en el archivo
+			while ((cnt = read(fd, buff, size)) == size && success) {
+				void *data = malloc(size); // reservar memoria para los datos del nuevo nodo
+				if (data == NULL) {
+					fprintf(stderr, "Error al reservar memoria para los datos del nodo: %s\n", strerror(errno));
+					success = 0;
+				} else {
+					memcpy(data, buff, size); // copiar los datos leídos al nodo
+					if (my_stack_push(stack, data) < 0) {
+						// debemos liberar la memoria reservada para los datos del nodo porque my_stack_purge no va a liberarlos (no esta en la pila)
+						free(data);
+						success = 0;
+					}
+				}
+			}
+			// comprobar si read() ha devuelto error
+			if (cnt < 0) {
+				fprintf(stderr, "Error al leer el archivo \"%s\": %s\n", filename, strerror(errno));
+				success = 0;
+			}
+		} else {
 			success = 0;
-			break;
+			fprintf(stderr, "Error al reservar memoria para el buffer de lectura del fichero: %s\n", strerror(errno));
 		}
-		memcpy(data, buff, size);
-		if (my_stack_push(stack, data) < 0) {
-			success = 0;
-			break;
-		}
-	}
-
-	if (r < 0) {
-		fprintf(stderr, "Error al leer el archivo \"%s\": %s\n", filename, strerror(errno));
+	} else {
 		success = 0;
 	}
 
-	free(buff);
+	if (buff != NULL) free(buff); // liberar buffer de lectura del archivo
 	if (close(fd) < 0) fprintf(stderr, "Error al cerrar el archivo \"%s\": %s\n", filename, strerror(errno));
 
 	if (success) return stack;
 
-	my_stack_purge(stack);
+	my_stack_purge(stack); // limpiar la pila en caso de que se haya encontrado un error
 	return NULL;
 }
 
+/*
+ * my_stack_write
+ * Escribe los datos de la pila a un archivo.
+ *
+ * Argumentos:
+ *    struct my_stack *: puntero de la pila a escribir
+ *    char *filename: ruta del archivo al que escribir
+ *
+ * Devuelve: la cantidad de nodos escritos o -1 en caso de error
+ */
 int my_stack_write(struct my_stack *stack, char *filename) {
 	if (stack == NULL || filename == NULL) return -1;
 
-	// create an auxiliary stack to store nodes in reverse order
+	// crear una pila auxiliar para guardar los nodos en orden inverso
+	// así cuando se leen con my_stack_read se insertan con el orden original
 	struct my_stack *aux = my_stack_init(stack->size);
 	if (aux == NULL) return -1;
 	struct my_stack_node *node = stack->top;
@@ -302,32 +318,38 @@ int my_stack_write(struct my_stack *stack, char *filename) {
 		node = node->next;
 	}
 
-	// open specified file and write data from the auxiliary stack
+	// abrir el archivo i escribir los datos a partir de la pila auxiliar
 	int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
 		fprintf(stderr, "Error al abrir el archivo \"%s\": %s\n", filename, strerror(errno));
 		return -1;
 	}
+	// escribir el campo size para indicar el tamaño de datos de cada nodo
 	if (write(fd, &stack->size, sizeof(int)) < 0) {
 		fprintf(stderr, "Error al escribir en el archivo \"%s\": %s\n", filename, strerror(errno));
 		return -1;
 	}
 
-	int success = 1;
+	int success = 1; // indica si se ha completado el proceso correctamente
+	// iterar la pila auxiliar y escribir los datos de cada nodo
 	int i = 0;
 	for (; aux->top != NULL && success; i++) {
 		if (write(fd, aux->top->data, aux->size) < 0) {
 			fprintf(stderr, "Error al escribir en el archivo \"%s\": %s\n", filename, strerror(errno));
 			success = 0;
 		} else {
+			// liberar el nodo de la pila auxiliar escrito; el puntero de los datos no se libera
+			// asignar puntero al nodo a liberar a una variable temporal para evitar dereferenciar un puntero liberado
 			void *tmp = aux->top;
-			aux->top = aux->top->next;
+			aux->top = aux->top->next; // iterar al siguiente nodo
 			free(tmp);
 		}
 	}
 
+	// cerrar el archivo y liberar la pila auxiliar antes de terminar la ejecución (liberación de recursos)
 	if (close(fd) < 0) fprintf(stderr, "Error al cerrar el archivo \"%s\": %s\n", filename, strerror(errno));
-	if (success) return i;
 	my_stack_purge(aux);
+
+	if (success) return i;
 	return 0;
 }
