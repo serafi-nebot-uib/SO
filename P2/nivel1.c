@@ -152,14 +152,14 @@ int internal_exit(char **args) {
 
 char *read_line(char *line) {
     print_prompt();
-    line = fgets(cmdbuff, COMMAND_LINE_SIZE, stdin);
-    if (line == NULL) {
+    char *s = fgets(line, COMMAND_LINE_SIZE, stdin);
+    if (s == NULL) {
         if (feof(stdin)) internal_exit(NULL);
         // TODO: comprobar ferror()?
         exit(1); // fgets ha devuelto error
     }
-    strrep(line, '\n', 0);
-    return line;
+    strrep(s, '\n', 0);
+    return s;
 }
 
 const char *const internal_cmd[] = { "cd", "export", "source", "jobs", "fg", "bg", "exit" };
@@ -176,8 +176,11 @@ int check_internal(char **args) {
 
 int parse_args(char **args, char *line) {
     size_t i = 0;
-    for (char *token = strtok(line, ARGS_SEP); token && i < ARGS_SIZE-1 && token[0] != '#'; token = strtok(NULL, ARGS_SEP))
+    char *token = strtok(line, ARGS_SEP);
+    while (token && i < ARGS_SIZE-1 && token[0] != '#') {
         args[i++] = token;
+        token = strtok(NULL, ARGS_SEP);
+    }
     args[i] = NULL;
 #if DEBUG_LEVEL <= LOG_LEVEL
     for (size_t j = 0; j <= i; j++) DEBUG("parse_args() -> token: %s", args[j]);
@@ -193,6 +196,6 @@ int execute_line(char *line) {
 
 int main(int argc, char **argv) {
     char *line = NULL;
-    while ((line = read_line(NULL)) != NULL) execute_line(line);
+    while ((line = read_line(cmdbuff)) != NULL) execute_line(line);
     return 0;
 }
