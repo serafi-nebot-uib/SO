@@ -1,6 +1,13 @@
 #include "my_lib.h"
 #include <sys/fcntl.h>
 
+/*
+ * Integrantes del equipo:
+ *     Leticia Bargiela de Jesus
+ *     Juana Maria Luna Carvajal
+ *     Serafí Nebot Ginard
+ */
+
 // variable global para obtener el mensaje de error de funciones del sistema
 int errno;
 
