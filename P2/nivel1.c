@@ -175,10 +175,8 @@ int check_internal(char **args) {
 }
 
 int parse_args(char **args, char *line) {
-    // reemplazar '#' por '\0' para evitar que strtok procese tokens posteriores
-    strrep(line, '#', 0);
     size_t i = 0;
-    for (char *token = strtok(line, ARGS_SEP); token && i < ARGS_SIZE; token = strtok(NULL, ARGS_SEP))
+    for (char *token = strtok(line, ARGS_SEP); token && i < ARGS_SIZE-1 && token[0] != '#'; token = strtok(NULL, ARGS_SEP))
         args[i++] = token;
     args[i] = NULL;
 #if DEBUG_LEVEL <= LOG_LEVEL

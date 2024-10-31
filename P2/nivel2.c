@@ -25,6 +25,7 @@
 #define BMAG "\e[1;35m"
 #define BCYN "\e[1;36m"
 #define BWHT "\e[1;37m"
+#define BGRY "\e[1;90m"
 
 // Regular underline text
 #define UBLK "\e[4;30m"
@@ -79,8 +80,17 @@
 // Reset
 #define RST "\e[0m"
 
-#define DEBUG_LEVEL 1
-#define DEBUG(...) { if (DEBUG_LEVEL > 0) { fprintf(stderr, GRY); fprintf(stderr, __VA_ARGS__); fprintf(stderr, RST "\n"); }}
+#define DEBUG_LEVEL 3
+#define INFO_LEVEL 2
+#define WARN_LEVEL 1
+#define ERROR_LEVEL 0
+
+#define LOG_LEVEL DEBUG_LEVEL
+
+#define DEBUG(...) { if (DEBUG_LEVEL <= LOG_LEVEL) { fprintf(stderr, BGRY "debug: " RST); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); }}
+#define INFO(...) { if (INFO_LEVEL <= LOG_LEVEL) { fprintf(stderr, BCYN "info: " RST); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); }}
+#define WARN(...) { if (WARN_LEVEL <= LOG_LEVEL) { fprintf(stderr, BYEL "warn: " RST); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); }}
+#define ERROR(...) { if (ERROR_LEVEL <= LOG_LEVEL) { fprintf(stderr, BRED "error: " RST); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); }}
 
 #define min(a, b) (a < b ? a : b)
 #define max(a, b) (a > b ? a : b)
@@ -106,32 +116,32 @@ void print_prompt() {
 }
 
 int internal_cd(char **args) {
-    DEBUG("[internal_cd()]");
+    DEBUG("internal_cd()");
     return 0;
 }
 
 int internal_export(char **args) {
-    DEBUG("[internal_export()]");
+    DEBUG("internal_export()");
     return 0;
 }
 
 int internal_source(char **args) {
-    DEBUG("[internal_source()]");
+    DEBUG("internal_source()");
     return 0;
 }
 
 int internal_jobs(char **args) {
-    DEBUG("[internal_jobs()]");
+    DEBUG("internal_jobs()");
     return 0;
 }
 
 int internal_fg(char **args) {
-    DEBUG("[internal_fg()]");
+    DEBUG("internal_fg()");
     return 0;
 }
 
 int internal_bg(char **args) {
-    DEBUG("[internal_bg()]");
+    DEBUG("internal_bg()");
     return 0;
 }
 
@@ -142,14 +152,14 @@ int internal_exit(char **args) {
 
 char *read_line(char *line) {
     print_prompt();
-    char *s = NULL; // por si fgets() != cmdbuff
-    if ((s = fgets(cmdbuff, COMMAND_LINE_SIZE, stdin)) == NULL) {
+    line = fgets(cmdbuff, COMMAND_LINE_SIZE, stdin);
+    if (line == NULL) {
         if (feof(stdin)) internal_exit(NULL);
         // TODO: comprobar ferror()?
         exit(1); // fgets ha devuelto error
     }
-    strrep(s, '\n', 0);
-    return s;
+    strrep(line, '\n', 0);
+    return line;
 }
 
 const char *const internal_cmd[] = { "cd", "export", "source", "jobs", "fg", "bg", "exit" };
@@ -171,8 +181,8 @@ int parse_args(char **args, char *line) {
     for (char *token = strtok(line, ARGS_SEP); token && i < ARGS_SIZE; token = strtok(NULL, ARGS_SEP))
         args[i++] = token;
     args[i] = NULL;
-#if DEBUG_LEVEL > 0
-    for (size_t j = 0; j <= i; j++) DEBUG("[parse_args() -> token: %s]", args[j]);
+#if DEBUG_LEVEL <= LOG_LEVEL
+    for (size_t j = 0; j <= i; j++) DEBUG("parse_args() -> token: %s", args[j]);
 #endif
     return 0;
 }
