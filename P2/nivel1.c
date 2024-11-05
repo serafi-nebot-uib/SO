@@ -116,32 +116,32 @@ void print_prompt() {
 }
 
 int internal_cd(char **args) {
-    DEBUG("internal_cd()");
+    DEBUG("internal_cd() -> esta funcion cambiara el directorio actual");
     return 0;
 }
 
 int internal_export(char **args) {
-    DEBUG("internal_export()");
+    DEBUG("internal_export() -> esta funcion asignara valores a variables de entorno");
     return 0;
 }
 
 int internal_source(char **args) {
-    DEBUG("internal_source()");
+    DEBUG("internal_source() -> esta funcion ejecutara un fichero de lineas de comandos");
     return 0;
 }
 
 int internal_jobs(char **args) {
-    DEBUG("internal_jobs()");
+    DEBUG("internal_jobs() -> esta funcion mostrara el PID de los procesos que no esten en foreground");
     return 0;
 }
 
 int internal_fg(char **args) {
-    DEBUG("internal_fg()");
+    DEBUG("internal_fg() -> esta funcion enviará un proceso del background al foreground");
     return 0;
 }
 
 int internal_bg(char **args) {
-    DEBUG("internal_bg()");
+    DEBUG("internal_bg() -> esta funcion reactivara un proceso detenido para que se ejecute en segundo plano");
     return 0;
 }
 
