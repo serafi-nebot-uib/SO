@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/param.h>
 
 // https://gist.github.com/RabaDabaDoba/145049536f815903c79944599c6f952a
 // Regular text
@@ -102,6 +104,11 @@ char cmdbuff[COMMAND_LINE_SIZE] = {};
 #define ARGS_SIZE 64
 char *args[ARGS_SIZE] = {};
 
+// buffer global para realizar las llamadas a getcwd()
+char cwdbuff[MAXPATHLEN] = {};
+
+int errno;
+
 void strrep(char *s, char old, char new) {
     for (; *s; s++)
         if (*s == old) *s = new;
@@ -109,39 +116,79 @@ void strrep(char *s, char old, char new) {
 
 void print_prompt() {
     char *user = getenv("USER");
-    char *pwd = getenv("PWD");
+    char *cwd = getcwd(cwdbuff, MAXPATHLEN);
     fflush(stdout);
-    printf(BCYN "%s" BRED ":" BGRN "%s" BWHT "$ " RST, user, pwd);
+    printf(BCYN "%s" BRED ":" BGRN "%s" BWHT "$ " RST, user, cwd);
     fflush(stdout);
 }
 
+size_t args_count(char **args) {
+    size_t i = 0;
+    while (args[i] != NULL) i++;
+    return i;
+}
+
 int internal_cd(char **args) {
-    DEBUG("internal_cd()");
+    size_t argc = args_count(args) - 1; // el primer argumento es el nombre del comando
+    char *nwd = NULL; // new working directory
+    if (argc == 0) {
+        nwd = getenv("HOME");
+    } else if (argc == 1) {
+        nwd = args[1];
+    } else {
+    }
+
+    if (nwd == NULL) {
+        ERROR("argumentos invalidos");
+        return -1;
+    }
+
+    if (chdir(nwd) < 0) {
+        ERROR("no se ha podido cambiar de directorio: %s", strerror(errno));
+        return -1;
+    }
+
     return 0;
 }
 
 int internal_export(char **args) {
-    DEBUG("internal_export()");
+    char *arg = args[1];
+    if (arg == NULL) {
+        ERROR("nombre y valor de la variable no especificados");
+        return -1;
+    }
+    char *name = strtok(arg, "=");
+    DEBUG("internal_export() -> valor inicial \"%s\" = %s", name, getenv(name));
+    char *value = strtok(NULL, "");
+    if (value == NULL) {
+        ERROR("valor de la variable de entorno no especificado");
+        return -1;
+    }
+    if (setenv(name, value, 1) < 0) {
+        ERROR("no se ha podido modificar la variable de entorno \"%s\": %s", name, strerror(errno));
+        return -1;
+    }
+    DEBUG("internal_export() -> valor final \"%s\" = %s", name, getenv(name));
     return 0;
 }
 
 int internal_source(char **args) {
-    DEBUG("internal_source()");
+    DEBUG("internal_source() -> esta funcion ejecutara un fichero de lineas de comandos");
     return 0;
 }
 
 int internal_jobs(char **args) {
-    DEBUG("internal_jobs()");
+    DEBUG("internal_jobs() -> esta funcion mostrara el PID de los procesos que no esten en foreground");
     return 0;
 }
 
 int internal_fg(char **args) {
-    DEBUG("internal_fg()");
+    DEBUG("internal_fg() -> esta funcion enviará un proceso del background al foreground");
     return 0;
 }
 
 int internal_bg(char **args) {
-    DEBUG("internal_bg()");
+    DEBUG("internal_bg() -> esta funcion reactivara un proceso detenido para que se ejecute en segundo plano");
     return 0;
 }
 
@@ -152,14 +199,14 @@ int internal_exit(char **args) {
 
 char *read_line(char *line) {
     print_prompt();
-    line = fgets(cmdbuff, COMMAND_LINE_SIZE, stdin);
-    if (line == NULL) {
+    char *s = fgets(line, COMMAND_LINE_SIZE, stdin);
+    if (s == NULL) {
         if (feof(stdin)) internal_exit(NULL);
         // TODO: comprobar ferror()?
         exit(1); // fgets ha devuelto error
     }
-    strrep(line, '\n', 0);
-    return line;
+    strrep(s, '\n', 0);
+    return s;
 }
 
 const char *const internal_cmd[] = { "cd", "export", "source", "jobs", "fg", "bg", "exit" };
@@ -196,6 +243,6 @@ int execute_line(char *line) {
 
 int main(int argc, char **argv) {
     char *line = NULL;
-    while ((line = read_line(NULL)) != NULL) execute_line(line);
+    while ((line = read_line(cmdbuff)) != NULL) execute_line(line);
     return 0;
 }
