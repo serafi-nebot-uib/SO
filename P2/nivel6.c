@@ -90,6 +90,7 @@
 #define WARN_LEVEL 1
 #define ERROR_LEVEL 0
 
+// #define LOG_LEVEL ERROR_LEVEL
 #define LOG_LEVEL DEBUG_LEVEL
 
 #define DEBUG(...) { if (DEBUG_LEVEL <= LOG_LEVEL) { fprintf(stderr, BGRY "debug: " RST); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); }}
@@ -396,7 +397,6 @@ char *signal_str(int status) {
 }
 
 void reaper(int signum) {
-    printf("\n");
     signal(SIGCHLD, reaper);
     int status = 0;
     int pid = 0;
@@ -408,11 +408,11 @@ void reaper(int signum) {
             int pos = jobs_list_find(pid);
             if (pos < 0) {
                 ERROR("no se ha encontrado el pid %d en la lista de procesos", pid);
-                continue;
+            } else {
+                jobs_list_remove(pos);
+                printf("proceso %d finalizado (%s) con el estado: %d\n", jobs_list[0].pid, signal_str(status), status);
+                print_prompt();
             }
-            jobs_list_remove(pos);
-            printf("proceso %d finalizado (%s) con el estado: %d\n", jobs_list[0].pid, signal_str(status), status);
-            print_prompt();
         }
     }
 }
@@ -426,30 +426,33 @@ void ctrlc(int signum) {
             kill(job.pid, SIGTERM);
         } else {
             DEBUG("ctrlc() -> señal SIGTERM no enviada por %d (%s): el proceso en foreground es el shell", getpid(), mi_shell);
+            print_prompt();
         }
     } else {
         DEBUG("ctrlc() -> señal SIGTERM no enviada por %d (%s): no hay ningun proceso en foreground", getpid(), mi_shell);
+        print_prompt();
     }
-    print_prompt();
 }
 
 void ctrlz(int signum) {
-    printf("\n");
+#if LOG_LEVEL <= DEBUG_LEVEL
+    fprintf(stderr, "\n");
+#endif
     struct info_job *job = &jobs_list[0];
     if (job->pid > 0) {
         if (strcmp(job->cmd, mi_shell) != 0) {
             DEBUG("ctrlc() -> señal SIGSTOP enviada a %d (%s) por %d (%s)", job->pid, job->cmd, getpid(), mi_shell);
             kill(job->pid, SIGSTOP);
             job->estado = 'D';
-            jobs_list_add(job->pid, job->estado, job->cmd);
+            int pos = jobs_list_add(job->pid, job->estado, job->cmd);
             job_reset(job);
+            if (pos > 0) print_job_status(pos);
         } else {
             DEBUG("señal SIGSTOP no enviada por %d (%s): el proceso en foreground es el shell", getpid(), mi_shell);
         }
     } else {
         DEBUG("señal SIGSTOP no enviada por %d (%s): no hay ningun proceso en foreground", getpid(), mi_shell);
     }
-    print_prompt();
 }
 
 int is_background(char **args) {
@@ -463,22 +466,21 @@ int is_background(char **args) {
 }
 
 int is_output_redirection(char **args) {
-    for (int i = 0; i < ARGS_SIZE-1; i++) {
-        DEBUG("is_output_redirection() -> args[%d]: %s; args[%d]: %s", i, args[i], i+1, args[i+1]);
-        // if (strcmp(args[i], ">") == 0 && args[i+1] != NULL) {
-        // DEBUG("is_output_redirection() -> redirecting output");
-        //     args[i] = NULL;
-        //     int fd = open(args[i+1], O_CREAT | O_RDWR, 0644);
-        //     if (fd < 0) {
-        //         ERROR("no se ha podido abrir el archivo %s: %s", args[i+1], strerror(errno));
-        //     } else {
-        //         // if (dup2(fd, STDOUT_FILENO) < 0)
-        //         //     ERROR("no se ha podido redireccionar stdout al archivo %s: %s", args[i+1], strerror(errno));
-        //         if (close(fd) < 0)
-        //             ERROR("no se ha podido cerrar el archivo %s: %s", args[i+1], strerror(errno));
-        //     }
-        //     return 1;
-        // }
+    for (int i = 0; i < ARGS_SIZE-1 && args[i] != NULL; i++) {
+        if (strcmp(args[i], ">") == 0 && args[i+1] != NULL) {
+            DEBUG("is_output_redirection() -> redirecting output");
+            args[i] = NULL;
+            int fd = open(args[i+1], O_CREAT | O_RDWR, 0644);
+            if (fd < 0) {
+                ERROR("no se ha podido abrir el archivo %s: %s", args[i+1], strerror(errno));
+            } else {
+                if (dup2(fd, STDOUT_FILENO) < 0)
+                    ERROR("no se ha podido redireccionar stdout al archivo %s: %s", args[i+1], strerror(errno));
+                if (close(fd) < 0)
+                    ERROR("no se ha podido cerrar el archivo %s: %s", args[i+1], strerror(errno));
+            }
+            return 1;
+        }
     }
     return 0;
 }
@@ -505,8 +507,8 @@ int execute_line(char *line) {
         } else {
             // parent
             if (background) {
-                size_t job_idx = jobs_list_add(pid, 'E', line);
-                if (job_idx > 0) print_job_status(job_idx);
+                int pos = jobs_list_add(pid, 'E', line);
+                if (pos > 0) print_job_status(pos);
             } else {
                 jobs_list[0].pid = pid;
                 jobs_list[0].estado = 'E';
