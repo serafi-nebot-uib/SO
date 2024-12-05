@@ -103,6 +103,7 @@
 
 #define COMMAND_LINE_SIZE  1024
 char cmdbuff[COMMAND_LINE_SIZE] = {};
+char linebuff[COMMAND_LINE_SIZE] = {};
 
 #define ARGS_SEP "\t\n\r "
 #define ARGS_SIZE 64
@@ -126,9 +127,6 @@ size_t n_job = 0;
 static struct info_job jobs_list[N_JOBS];
 static char mi_shell[COMMAND_LINE_SIZE];
 
-void chrrep(char *s, char old, char new);
-void print_prompt();
-size_t args_count(char **args);
 int internal_cd(char **args);
 int internal_export(char **args);
 int internal_source(char **args);
@@ -136,30 +134,76 @@ int internal_jobs(char **args);
 int internal_fg(char **args);
 int internal_bg(char **args);
 int internal_exit(char **args);
-char *read_line(char *line);
-int check_internal(char **args);
-int parse_args(char **args, char *line);
 int execute_line(char *line);
 
+// tabla de comandos internos para evitar encadenar múltiples ifs
+const char *const internal_cmd[] = { "cd", "export", "source", "jobs", "fg", "bg", "exit" };
+int (*internal_fn[])(char **args) = { internal_cd, internal_export, internal_source, internal_jobs, internal_fg, internal_bg, internal_exit };
+
+static char *SIG_STR_EXITED = "EXITED";
+static char *SIG_STR_STOPPED = "STOPPED";
+static char *SIG_STR_SIGNALED = "SIGNALED";
+static char *SIG_STR_CONTINUED = "CONTINUED";
+static char *SIG_STR_UNKOWN = "unkown";
+
+/**
+ * Obtener el nombre del status que ha devuelto un proceso.
+ *
+ * Argumentos:
+ *  int status: codigo de estado que ha devuelto el proceso
+ *
+ * Devuelve: el nombre del codigo de estado proporcionado
+ */
+char *signal_str(int status) {
+    if (WIFEXITED(status)) return SIG_STR_EXITED;
+    if (WIFSTOPPED(status)) return SIG_STR_STOPPED;
+    if (WIFSIGNALED(status)) return SIG_STR_SIGNALED;
+    if (WIFCONTINUED(status)) return SIG_STR_CONTINUED;
+    return SIG_STR_UNKOWN;
+}
+
+/**
+ * Restablecer los campos de info_job. Se utiliza para 'eliminar' los datos de un proceso que se ha borrado de la lista.
+ *
+ * Argumentos:
+ *  struct info_job *job: puntero al info_job que se debe restablecer
+ */
 void job_reset(struct info_job *job) {
     job->pid = 0;
     job->estado = 'F';
     memset(job->cmd, 0, COMMAND_LINE_SIZE);
 }
 
-void job_cpy(struct info_job *dst, struct info_job *src) {
+/**
+ * Copiar los datos de un info_job a otro.
+ *
+ * Argumentos:
+ *  struct info_job *dst: info_job de destino (donde se van a copiar los datos)
+ *  struct info_job *src: info_job de origin (de donde se van a copiar los datos)
+ */
+void job_copy(struct info_job *dst, struct info_job *src) {
     dst->pid = src->pid;
     dst->estado = src->estado;
     memcpy(dst->cmd, src->cmd, COMMAND_LINE_SIZE);
 }
 
-
+/**
+ * Reemplazar carácter dentro de un string.
+ *
+ * Argumentos:
+ *  char *s: string en el que reemplazar los carácteres
+ *  char old: carácter a reemplazar
+ *  char new: nuevo carácter después del reemplazo
+ */
 void chrrep(char *s, char old, char new) {
     if (s == NULL) return;
     for (; *s; s++)
         if (*s == old) *s = new;
 }
 
+/**
+ * Imprimir el prompt.
+ */
 void print_prompt() {
     char *user = getenv("USER");
     char *cwd = getcwd(cwdbuff, MAXPATHLEN);
@@ -195,9 +239,13 @@ int jobs_list_remove(int pos) {
     if (pos >= N_JOBS) return -1;
     struct info_job *src = &jobs_list[n_job--];
     struct info_job *dst = &jobs_list[pos];
-    job_cpy(dst, src);
+    job_copy(dst, src);
     job_reset(src);
     return 0;
+}
+
+void print_job_status(size_t idx) {
+    printf("[%lu] %d\t%c\t%s\n", idx, jobs_list[idx].pid, jobs_list[idx].estado, jobs_list[idx].cmd);
 }
 
 int internal_cd(char **args) {
@@ -273,10 +321,6 @@ int internal_source(char **args) {
     return 0;
 }
 
-void print_job_status(size_t idx) {
-    printf("[%lu] %d\t%c\t%s\n", idx, jobs_list[idx].pid, jobs_list[idx].estado, jobs_list[idx].cmd);
-}
-
 int internal_jobs(char **args) {
     for (int i = 1; i <= n_job; i++) print_job_status(i);
     return 0;
@@ -307,7 +351,7 @@ int internal_fg(char **args) {
     if (strncmp(end, ptrn, n) == 0)
         while (*end) *end++ = 0;
 
-    job_cpy(fg_job, job);
+    job_copy(fg_job, job);
     jobs_list_remove(pos);
 
     print_job_status(0);
@@ -342,58 +386,6 @@ int internal_bg(char **args) {
 int internal_exit(char **args) {
     printf("\ngoodbye!\n");
     exit(0);
-}
-
-char *read_line(char *line) {
-    print_prompt();
-    char *s = fgets(line, COMMAND_LINE_SIZE, stdin);
-    if (s == NULL) {
-        if (feof(stdin)) internal_exit(NULL);
-        // TODO: comprobar ferror()?
-        exit(1); // fgets ha devuelto error
-    }
-    chrrep(s, '\n', 0);
-    return s;
-}
-
-const char *const internal_cmd[] = { "cd", "export", "source", "jobs", "fg", "bg", "exit" };
-int (*internal_fn[])(char **args) = { internal_cd, internal_export, internal_source, internal_jobs, internal_fg, internal_bg, internal_exit };
-
-int check_internal(char **args) {
-    if (args[0] == NULL) return 0;
-    int size = min(sizeof(internal_cmd) / sizeof(*internal_cmd), sizeof(internal_fn) / sizeof(*internal_fn));
-    for (size_t i = 0; i < size; i++)
-        if (strcmp(args[0], internal_cmd[i]) == 0)
-            return internal_fn[i](args);
-    return 1;
-}
-
-int parse_args(char **args, char *line) {
-    size_t i = 0;
-    char *token = strtok(line, ARGS_SEP);
-    while (token && i < ARGS_SIZE-1 && token[0] != '#') {
-        args[i++] = token;
-        token = strtok(NULL, ARGS_SEP);
-    }
-    args[i] = NULL;
-#if DEBUG_LEVEL <= LOG_LEVEL
-    for (size_t j = 0; j <= i; j++) DEBUG("parse_args() -> token: %s", args[j]);
-#endif
-    return 0;
-}
-
-static char SIG_STR_EXITED[] = "EXITED";
-static char SIG_STR_STOPPED[] = "STOPPED";
-static char SIG_STR_SIGNALED[] = "SIGNALED";
-static char SIG_STR_CONTINUED[] = "CONTINUED";
-static char SIG_STR_UNKOWN[] = "unkown";
-
-char *signal_str(int status) {
-    if (WIFEXITED(status)) return SIG_STR_EXITED;
-    if (WIFSTOPPED(status)) return SIG_STR_STOPPED;
-    if (WIFSIGNALED(status)) return SIG_STR_SIGNALED;
-    if (WIFCONTINUED(status)) return SIG_STR_CONTINUED;
-    return SIG_STR_UNKOWN;
 }
 
 void reaper(int signum) {
@@ -455,6 +447,41 @@ void ctrlz(int signum) {
     }
 }
 
+char *read_line(char *line) {
+    print_prompt();
+    char *s = fgets(line, COMMAND_LINE_SIZE, stdin);
+    if (s == NULL) {
+        if (feof(stdin)) internal_exit(NULL);
+        // TODO: comprobar ferror()?
+        exit(1); // fgets ha devuelto error
+    }
+    chrrep(s, '\n', 0);
+    return s;
+}
+
+int check_internal(char **args) {
+    if (args[0] == NULL) return 0;
+    int size = min(sizeof(internal_cmd) / sizeof(*internal_cmd), sizeof(internal_fn) / sizeof(*internal_fn));
+    for (size_t i = 0; i < size; i++)
+        if (strcmp(args[0], internal_cmd[i]) == 0)
+            return internal_fn[i](args);
+    return 1;
+}
+
+int parse_args(char **args, char *line) {
+    size_t i = 0;
+    char *token = strtok(line, ARGS_SEP);
+    while (token && i < ARGS_SIZE-1 && token[0] != '#') {
+        args[i++] = token;
+        token = strtok(NULL, ARGS_SEP);
+    }
+    args[i] = NULL;
+#if DEBUG_LEVEL <= LOG_LEVEL
+    for (size_t j = 0; j <= i; j++) DEBUG("parse_args() -> token: %s", args[j]);
+#endif
+    return 0;
+}
+
 int is_background(char **args) {
     for (int i = 0; i < ARGS_SIZE && args[i] != NULL; i++) {
         if (strcmp(args[i], "&") == 0) {
@@ -484,8 +511,6 @@ int is_output_redirection(char **args) {
     }
     return 0;
 }
-
-char linebuff[COMMAND_LINE_SIZE] = {};
 
 int execute_line(char *line) {
     strncpy(linebuff, line, COMMAND_LINE_SIZE);
