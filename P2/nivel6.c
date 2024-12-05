@@ -140,12 +140,9 @@ static char *SIG_STR_CONTINUED = "CONTINUED";
 static char *SIG_STR_UNKOWN = "unkown";
 
 /**
- * Obtener el nombre del status que ha devuelto un proceso.
- *
- * Argumentos:
- *  int status: codigo de estado que ha devuelto el proceso
- *
- * Devuelve: el nombre del codigo de estado proporcionado
+ * Obtener la cadena de texto asociada a un estado de un proceso.
+ * @param status: estado del proceso
+ * @return cadena de texto asociada al estado del proceso
  */
 char *signal_str(int status) {
     if (WIFEXITED(status)) return SIG_STR_EXITED;
@@ -156,10 +153,9 @@ char *signal_str(int status) {
 }
 
 /**
- * Restablecer los campos de info_job. Se utiliza para 'eliminar' los datos de un proceso que se ha borrado de la lista.
- *
- * Argumentos:
- *  struct info_job *job: puntero al info_job que se debe restablecer
+ * Resetear los valores de un info_job.
+ * @param job: info_job a resetear
+ * @return void
  */
 void job_reset(struct info_job *job) {
     job->pid = 0;
@@ -169,10 +165,8 @@ void job_reset(struct info_job *job) {
 
 /**
  * Copiar los datos de un info_job a otro.
- *
- * Argumentos:
- *  struct info_job *dst: info_job de destino (donde se van a copiar los datos)
- *  struct info_job *src: info_job de origin (de donde se van a copiar los datos)
+ * @param dst: info_job destino
+ * @param src: info_job fuente
  */
 void job_copy(struct info_job *dst, struct info_job *src) {
     dst->pid = src->pid;
@@ -182,11 +176,10 @@ void job_copy(struct info_job *dst, struct info_job *src) {
 
 /**
  * Reemplazar carácter dentro de un string.
- *
- * Argumentos:
- *  char *s: string en el que reemplazar los carácteres
- *  char old: carácter a reemplazar
- *  char new: nuevo carácter después del reemplazo
+ * @param s: string
+ * @param old: carácter a reemplazar
+ * @param new: carácter nuevo
+ * @return void
  */
 void chrrep(char *s, char old, char new) {
     if (s == NULL) return;
@@ -196,6 +189,7 @@ void chrrep(char *s, char old, char new) {
 
 /**
  * Imprimir el prompt.
+ * @return void
  */
 void print_prompt() {
     char *user = getenv("USER");
@@ -204,13 +198,23 @@ void print_prompt() {
     printf(BCYN "%s" BRED ":" BGRN "%s" BWHT "$ " RST, user, cwd);
     fflush(stdout);
 }
-
+/**
+ * Contar el número de argumentos en un array de strings.
+ * @param args: array de strings
+ * @return número de argumentos
+ */
 size_t args_count(char **args) {
     size_t i = 0;
     while (args[i] != NULL) i++;
     return i;
 }
-
+/**
+ * Añadir un proceso a la lista de procesos.
+ * @param pid: pid del proceso
+ * @param estado: estado del proceso
+ * @param cmd: comando asociado al proceso
+ * @return posición del proceso en la lista
+ */
 int jobs_list_add(pid_t pid, char estado, char *cmd) {
     // N_JOBS-1 because the first element is reserved for foreground
     if (n_job >= N_JOBS-1) return -1;
@@ -221,13 +225,23 @@ int jobs_list_add(pid_t pid, char estado, char *cmd) {
     DEBUG("jobs_list_add() -> proceso %d (%s) añadido a la lista", pid, cmd);
     return n_job;
 }
-
+/**
+ * Buscar un proceso en la lista de procesos.
+ * @param pid: pid del proceso
+ * @return posición del proceso en la lista
+ * @return -1 si no se ha encontrado el proceso
+ */
 int jobs_list_find(pid_t pid) {
     for (int i = 0; i <= n_job; i++)
         if (jobs_list[i].pid == pid) return i;
     return -1;
 }
-
+/**
+ * Eliminar un proceso de la lista de procesos.
+ * @param pos: posición del proceso en la lista
+ * @return 0 si se ha eliminado el proceso
+ * @return -1 si no se ha eliminado el proceso
+ */
 int jobs_list_remove(int pos) {
     if (pos >= N_JOBS) return -1;
     struct info_job *src = &jobs_list[n_job--];
@@ -236,11 +250,20 @@ int jobs_list_remove(int pos) {
     job_reset(src);
     return 0;
 }
-
+/**
+ * Imprimir el estado de un proceso.
+ * @param idx: posición del proceso en la lista
+ * @return void
+ */
 void print_job_status(size_t idx) {
     printf("[%lu] %d\t%c\t%s\n", idx, jobs_list[idx].pid, jobs_list[idx].estado, jobs_list[idx].cmd);
 }
-
+/**
+ * Cambiar de directorio.
+ * @param args: array de strings
+ * @return 0 si se ha cambiado de directorio
+ * @return -1 si no se ha podido cambiar de directorio
+ */
 int internal_cd(char **args) {
     size_t argc = args_count(args) - 1; // el primer argumento es el nombre del comando
     char *nwd = NULL; // new working directory
@@ -264,7 +287,12 @@ int internal_cd(char **args) {
 
     return 0;
 }
-
+/**
+ * Exportar una variable de entorno.
+ * @param args: array de strings
+ * @return 0 si se ha exportado la variable
+ * @return -1 si no se ha podido exportar la variable
+ */
 int internal_export(char **args) {
     char *arg = args[1];
     if (arg == NULL) {
@@ -285,7 +313,12 @@ int internal_export(char **args) {
     DEBUG("internal_export() -> valor final \"%s\" = %s", name, getenv(name));
     return 0;
 }
-
+/**
+ * Ejecutar un script.
+ * @param args: array de strings
+ * @return 0 si se ha ejecutado el script
+ * @return -1 si no se ha podido ejecutar el script
+ */
 int internal_source(char **args) {
     char *path = args[1];
     if (path == NULL) {
@@ -314,12 +347,21 @@ int internal_source(char **args) {
 
     return 0;
 }
-
+/**
+ * Listar los procesos en background.
+ * @param args: array de strings
+ * @return 0 si se han listado los procesos
+ */
 int internal_jobs(char **args) {
     for (int i = 1; i <= n_job; i++) print_job_status(i);
     return 0;
 }
-
+/**
+ * Traer un proceso a foreground.
+ * @param args: array de strings
+ * @return 0 si se ha traido el proceso a foreground
+ * @return -1 si no se ha podido traer el proceso a foreground
+ */
 int internal_fg(char **args) {
     if (args[1] == NULL) {
         ERROR("sintaxis erronea; uso: fg <pos_proceso>");
@@ -353,7 +395,12 @@ int internal_fg(char **args) {
 
     return 0;
 }
-
+/**
+ * Traer un proceso a background.
+ * @param args: array de strings
+ * @return 0 si se ha traido el proceso a background
+ * @return -1 si no se ha podido traer el proceso a background
+ */
 int internal_bg(char **args) {
     if (args[1] == NULL) {
         ERROR("sintaxis erronea; uso: bg <pos_proceso>");
@@ -376,12 +423,20 @@ int internal_bg(char **args) {
     print_job_status(pos);
     return 0;
 }
-
+/**
+ * Salir del shell.
+ * @param args: array de strings
+ * @return void
+ */
 int internal_exit(char **args) {
     printf("\ngoodbye!\n");
     exit(0);
 }
-
+/**
+ * Reap hijos.
+ * @param signum: señal
+ * @return void
+ */
 void reaper(int signum) {
     signal(SIGCHLD, reaper);
     int status = 0;
@@ -402,7 +457,11 @@ void reaper(int signum) {
         }
     }
 }
-
+/**
+ * Manejar la señal SIGINT.
+ * @param signum: señal
+ * @return void
+ */
 void ctrlc(int signum) {
     printf("\n");
     struct info_job job = jobs_list[0];
@@ -419,7 +478,11 @@ void ctrlc(int signum) {
         print_prompt();
     }
 }
-
+/**
+ * Manejar la señal SIGTSTP.
+ * @param signum: señal
+ * @return void
+ */
 void ctrlz(int signum) {
 #if DEBUGN6
     ERROR("\n");
@@ -440,7 +503,11 @@ void ctrlz(int signum) {
         DEBUG("señal SIGSTOP no enviada por %d (%s): no hay ningun proceso en foreground", getpid(), mi_shell);
     }
 }
-
+/**
+ * Leer una línea de la entrada estándar.
+ * @param line: buffer para almacenar la línea
+ * @return puntero a la línea leída
+ */
 char *read_line(char *line) {
     print_prompt();
     char *s = fgets(line, COMMAND_LINE_SIZE, stdin);
@@ -452,7 +519,12 @@ char *read_line(char *line) {
     chrrep(s, '\n', 0);
     return s;
 }
-
+/**
+ * Comprobar si el comando es interno.
+ * @param args: array de strings
+ * @return 0 si el comando es interno
+ * @return 1 si el comando no es interno
+ */
 int check_internal(char **args) {
     if (args[0] == NULL) return 0;
     int size = min(sizeof(internal_cmd) / sizeof(*internal_cmd), sizeof(internal_fn) / sizeof(*internal_fn));
@@ -461,7 +533,12 @@ int check_internal(char **args) {
             return internal_fn[i](args);
     return 1;
 }
-
+/**
+ * Parsear los argumentos de una línea.
+ * @param args: array de strings
+ * @param line: línea de entrada
+ * @return 0 si todo está bien
+ */
 int parse_args(char **args, char *line) {
     size_t i = 0;
     char *token = strtok(line, ARGS_SEP);
@@ -475,7 +552,12 @@ int parse_args(char **args, char *line) {
 #endif
     return 0;
 }
-
+/**
+ * Comprobar si el comando se ejecutará en background.
+ * @param args: array de strings
+ * @return 1 si el comando se ejecutará en background
+ * @return 0 si el comando no se ejecutará en background
+ */
 int is_background(char **args) {
     for (int i = 0; i < ARGS_SIZE && args[i] != NULL; i++) {
         if (strcmp(args[i], "&") == 0) {
@@ -485,7 +567,12 @@ int is_background(char **args) {
     }
     return 0;
 }
-
+/**
+ * Comprobar si se redirige la salida.
+ * @param args: array de strings
+ * @return 1 si se redirige la salida
+ * @return 0 si no se redirige la salida
+ */
 int is_output_redirection(char **args) {
     for (int i = 0; i < ARGS_SIZE-1 && args[i] != NULL; i++) {
         if (strcmp(args[i], ">") == 0 && args[i+1] != NULL) {
@@ -505,7 +592,11 @@ int is_output_redirection(char **args) {
     }
     return 0;
 }
-
+/**
+ * Ejecutar una línea de comandos.
+ * @param line: línea de entrada
+ * @return 0 si todo está bien
+ */
 int execute_line(char *line) {
     strncpy(linebuff, line, COMMAND_LINE_SIZE);
     parse_args(args, linebuff);
