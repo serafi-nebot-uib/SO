@@ -85,7 +85,7 @@
 // Reset
 #define RST "\e[0m"
 
-#define DEBUGN6 1
+#define DEBUGN6 0
 
 #define DEBUG(...) { if (DEBUGN6) { fprintf(stderr, GRY "["); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "]" RST "\n"); }}
 #define ERROR(...) { fprintf(stderr, RED); fprintf(stderr, __VA_ARGS__); fprintf(stderr, RST "\n"); }
@@ -97,13 +97,12 @@
 #define COMMAND_LINE_SIZE  1024
 char cmdbuff[COMMAND_LINE_SIZE] = {};
 char linebuff[COMMAND_LINE_SIZE] = {};
+// buffer global para realizar las llamadas a getcwd() y cd avanzado
+char pathbuff[MAXPATHLEN] = {};
 
 #define ARGS_SEP "\t\n\r "
 #define ARGS_SIZE 64
 char *args[ARGS_SIZE] = {};
-
-// buffer global para realizar las llamadas a getcwd()
-char cwdbuff[MAXPATHLEN] = {};
 
 int errno;
 
@@ -193,7 +192,7 @@ void chrrep(char *s, char old, char new) {
  */
 void print_prompt() {
     char *user = getenv("USER");
-    char *cwd = getcwd(cwdbuff, MAXPATHLEN);
+    char *cwd = getcwd(pathbuff, MAXPATHLEN);
     fflush(stdout);
     printf(BCYN "%s" BRED ":" BGRN "%s" BWHT "$ " RST, user, cwd);
     fflush(stdout);
@@ -265,22 +264,63 @@ void print_job_status(size_t idx) {
  * @return -1 si no se ha podido cambiar de directorio
  */
 int internal_cd(char **args) {
-    size_t argc = args_count(args) - 1; // el primer argumento es el nombre del comando
-    char *nwd = NULL; // new working directory
-    if (argc == 0) {
-        nwd = getenv("HOME");
-    } else if (argc == 1) {
-        nwd = args[1];
-    } else {
-        // cd avanzado
+    memset(pathbuff, 0, MAXPATHLEN);
+    char *path = pathbuff;
+
+    size_t argc = args_count(args)-1; // el primer argumento es el nombre del comando
+    switch (argc) {
+        // cd sin ningun argumento -> cd al HOME
+        case 0: {
+                if ((path = getenv("HOME")) == NULL) {
+                    ERRORSYS("no se ha podido obtener la variable de entorno HOME");
+                    return -1;
+                }
+            break;
+        }
+        // cd con un argumento -> cd simple
+        case 1: {
+            strcpy(path, args[1]);
+            break;
+        }
+        // cd con más de un argumento -> cd avanzado
+        default: {
+            char *ptr = pathbuff; // puntero al buffer para copiar los varios argumentos
+            int last = strlen(args[argc])-1; // último carácter del último token
+            if ((args[1][0] == '\'' && args[argc][last] == '\'') || (args[1][0] == '\"' && args[argc][last] == '\"')) {
+                // caso comillas simples o dobles al principio y final
+                // copiar cada token al buffer con un ' ' como separador
+                for (int i = 1; i <= argc; i++) {
+                    strcpy(ptr, args[i]);
+                    ptr += strlen(args[i]);
+                    *ptr++ = ' ';
+                }
+                path++; // eliminar la primera comilla
+                *(ptr-2) = 0; // eliminar la última comilla y el último separador (' ')
+            } else {
+                // caso con '\' al final de cada token (exceptuando el último)
+                // para cada token (excepto el último), copiar al buffer y reemplazar caracter final '\' por ' '
+                for (int i = 1; i < argc; i++) {
+                    // si el token no tiene '\' final -> error
+                    if (args[i][strlen(args[i])-1] != '\\') {
+                        ERROR("argumentos invalidos");
+                        return -1;
+                    }
+                    strcpy(ptr, args[i]); // copiar token al buffer
+                    ptr += strlen(args[i])-1;
+                    *ptr++ = ' '; // reemplazar el caracter final '\' por ' '
+                }
+                // para el último token -> comprobar que no tenga '\' final
+                if (args[argc][strlen(args[argc])-1] == '\\') {
+                    ERROR("argumentos invalidos");
+                    return -1;
+                }
+                strcpy(ptr, args[argc]); // copiar el último token
+            }
+             break;
+        }
     }
 
-    if (nwd == NULL) {
-        ERROR("argumentos invalidos");
-        return -1;
-    }
-
-    if (chdir(nwd) < 0) {
+    if (chdir(path) < 0) {
         ERRORSYS("no se ha podido cambiar de directorio");
         return -1;
     }
@@ -632,18 +672,7 @@ int execute_line(char *line) {
     return 0;
 }
 
-char *arg = "cd \"sistemas operativos\"";
-
-void test() {
-    parse_args(args, arg);
-    size_t argc = args_count(args) - 1; // el primer argumento es el nombre del comando
-    if (argc < 2) return;
-}
-
 int main(int argc, char **argv) {
-    // test();
-    // return 0;
-
     jobs_list[0].pid = 0;
     jobs_list[0].estado = 'N';
     memset(jobs_list[0].cmd, 0, COMMAND_LINE_SIZE);
