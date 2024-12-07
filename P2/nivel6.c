@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
@@ -100,11 +101,13 @@ char linebuff[COMMAND_LINE_SIZE] = {};
 // buffer global para realizar las llamadas a getcwd() y cd avanzado
 char pathbuff[MAXPATHLEN] = {};
 
+// variable que indica si se esta esperando la introducción de un comando por parte del usuario
+// se utiliza imprimir saltos de linea en ciertos eventos (e.g. reaper)
+volatile bool cmdwait = false;
+
 #define ARGS_SEP "\t\n\r "
 #define ARGS_SIZE 64
 char *args[ARGS_SIZE] = {};
-
-int errno;
 
 #define N_JOBS 64
 
@@ -193,7 +196,6 @@ void chrrep(char *s, char old, char new) {
 void print_prompt() {
     char *user = getenv("USER");
     char *cwd = getcwd(pathbuff, MAXPATHLEN);
-    fflush(stdout);
     printf(BCYN "%s" BRED ":" BGRN "%s" BWHT "$ " RST, user, cwd);
     fflush(stdout);
 }
@@ -336,7 +338,7 @@ int internal_cd(char **args) {
 int internal_export(char **args) {
     char *arg = args[1];
     if (arg == NULL) {
-        ERROR("nombre y valor de la variable no especificados");
+        ERROR("sintaxis erronea; uso: export <nombre_variable>=<valor_variable>");
         return -1;
     }
     char *name = strtok(arg, "=");
@@ -347,7 +349,7 @@ int internal_export(char **args) {
         return -1;
     }
     if (setenv(name, value, 1) < 0) {
-        perror("no se ha podido modificar la variable de entorno");
+        ERRORSYS("no se ha podido modificar la variable de entorno");
         return -1;
     }
     DEBUG("internal_export() -> valor final \"%s\" = %s", name, getenv(name));
@@ -430,7 +432,7 @@ int internal_fg(char **args) {
     job_copy(fg_job, job);
     jobs_list_remove(pos);
 
-    print_job_status(0);
+    printf("%s\n", fg_job->cmd);
     pause();
 
     return 0;
@@ -453,7 +455,7 @@ int internal_bg(char **args) {
     }
     struct info_job *job = &jobs_list[pos];
     if (job->estado == 'E') {
-        ERROR("el proceso %d (%s) ya esta en ejecución", job->pid, job->cmd);
+        ERROR("proceso %d (%s) ya esta en ejecución", job->pid, job->cmd);
         return -1;
     }
     job->estado = 'E';
@@ -469,7 +471,7 @@ int internal_bg(char **args) {
  * @return void
  */
 int internal_exit(char **args) {
-    printf("\ngoodbye!\n");
+    printf("goodbye!\n");
     exit(0);
 }
 /**
@@ -479,6 +481,8 @@ int internal_exit(char **args) {
  */
 void reaper(int signum) {
     signal(SIGCHLD, reaper);
+    // if (cmdwait) printf("[%d] %s\n", getpid(), __func__);
+    if (cmdwait) printf("\n");
     int status = 0;
     int pid = 0;
     while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
@@ -490,11 +494,14 @@ void reaper(int signum) {
             if (pos < 0) {
                 ERROR("no se ha encontrado el pid %d en la lista de procesos", pid);
             } else {
+                printf("proceso %d (%s) finalizado (%s) con el estado: %d\n", jobs_list[pos].pid, jobs_list[pos].cmd, signal_str(status), status);
                 jobs_list_remove(pos);
-                printf("proceso %d finalizado (%s) con el estado: %d\n", jobs_list[0].pid, signal_str(status), status);
-                print_prompt();
             }
         }
+    }
+    if (cmdwait) {
+        // printf("[%d] %-10s ", getpid(), __func__);
+        print_prompt();
     }
 }
 /**
@@ -503,6 +510,7 @@ void reaper(int signum) {
  * @return void
  */
 void ctrlc(int signum) {
+    // printf("%s\n", __func__);
     printf("\n");
     struct info_job job = jobs_list[0];
     if (job.pid > 0) {
@@ -511,10 +519,12 @@ void ctrlc(int signum) {
             kill(job.pid, SIGTERM);
         } else {
             DEBUG("ctrlc() -> señal SIGTERM no enviada por %d (%s): el proceso en foreground es el shell", getpid(), mi_shell);
-            print_prompt();
         }
     } else {
         DEBUG("ctrlc() -> señal SIGTERM no enviada por %d (%s): no hay ningun proceso en foreground", getpid(), mi_shell);
+    }
+    if (cmdwait) {
+        // printf("[%d] %-10s ", getpid(), __func__);
         print_prompt();
     }
 }
@@ -524,9 +534,8 @@ void ctrlc(int signum) {
  * @return void
  */
 void ctrlz(int signum) {
-#if DEBUGN6
-    ERROR("\n");
-#endif
+    // printf("[%d] %s\n", getpid(), __func__);
+    printf("\n");
     struct info_job *job = &jobs_list[0];
     if (job->pid > 0) {
         if (strcmp(job->cmd, mi_shell) != 0) {
@@ -542,6 +551,10 @@ void ctrlz(int signum) {
     } else {
         DEBUG("señal SIGSTOP no enviada por %d (%s): no hay ningun proceso en foreground", getpid(), mi_shell);
     }
+    if (cmdwait) {
+        // printf("[%d] %-10s ", getpid(), __func__);
+        print_prompt();
+    }
 }
 /**
  * Leer una línea de la entrada estándar.
@@ -549,12 +562,15 @@ void ctrlz(int signum) {
  * @return puntero a la línea leída
  */
 char *read_line(char *line) {
+    // printf("[%d] %-10s ", getpid(), __func__);
     print_prompt();
+    cmdwait = true;
     char *s = fgets(line, COMMAND_LINE_SIZE, stdin);
+    cmdwait = false;
     if (s == NULL) {
         if (feof(stdin)) internal_exit(NULL);
-        // TODO: comprobar ferror()?
-        exit(1); // fgets ha devuelto error
+        if (ferror(stdin)) ERRORSYS("error de lectura de stdin");
+        exit(1);
     }
     chrrep(s, '\n', 0);
     return s;
@@ -620,12 +636,12 @@ int is_output_redirection(char **args) {
             args[i] = NULL;
             int fd = open(args[i+1], O_CREAT | O_RDWR, 0644);
             if (fd < 0) {
-                perror("no se ha podido abrir el archivo");
+                ERRORSYS("no se ha podido abrir el archivo");
             } else {
                 if (dup2(fd, STDOUT_FILENO) < 0)
-                    perror("no se ha podido redireccionar stdout al archivo");
+                    ERRORSYS("no se ha podido redireccionar stdout al archivo");
                 if (close(fd) < 0)
-                    perror("no se ha podido cerrar el archivo");
+                    ERRORSYS("no se ha podido cerrar el archivo");
             }
             return 1;
         }
@@ -644,7 +660,7 @@ int execute_line(char *line) {
         int background = is_background(args);
         pid_t pid = fork();
         if (pid < 0) {
-            perror("no se ha podido crear un nuevo proceso");
+            ERRORSYS("no se ha podido crear un nuevo proceso");
             return -1;
         } else if (pid == 0) {
             // child
