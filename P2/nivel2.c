@@ -82,17 +82,11 @@
 // Reset
 #define RST "\e[0m"
 
-#define DEBUG_LEVEL 3
-#define INFO_LEVEL 2
-#define WARN_LEVEL 1
-#define ERROR_LEVEL 0
+#define DEBUGN2 0
 
-#define LOG_LEVEL DEBUG_LEVEL
-
-#define DEBUG(...) { if (DEBUG_LEVEL <= LOG_LEVEL) { fprintf(stderr, BGRY "debug: " RST); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); }}
-#define INFO(...) { if (INFO_LEVEL <= LOG_LEVEL) { fprintf(stderr, BCYN "info: " RST); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); }}
-#define WARN(...) { if (WARN_LEVEL <= LOG_LEVEL) { fprintf(stderr, BYEL "warn: " RST); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); }}
-#define ERROR(...) { if (ERROR_LEVEL <= LOG_LEVEL) { fprintf(stderr, BRED "error: " RST); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); }}
+#define DEBUG(...) { if (DEBUGN2) { fprintf(stderr, GRY "["); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "]" RST "\n"); }}
+#define ERROR(...) { fprintf(stderr, RED); fprintf(stderr, __VA_ARGS__); fprintf(stderr, RST "\n"); }
+#define ERRORSYS(s) { fprintf(stderr, RED); perror(s); fprintf(stderr, RST);}
 
 #define min(a, b) (a < b ? a : b)
 #define max(a, b) (a > b ? a : b)

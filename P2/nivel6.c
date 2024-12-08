@@ -90,7 +90,7 @@
 
 #define DEBUG(...) { if (DEBUGN6) { fprintf(stderr, GRY "["); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "]" RST "\n"); }}
 #define ERROR(...) { fprintf(stderr, RED); fprintf(stderr, __VA_ARGS__); fprintf(stderr, RST "\n"); }
-#define ERRORSYS(s) { perror(RED s RST); }
+#define ERRORSYS(s) { fprintf(stderr, RED); perror(s); fprintf(stderr, RST);}
 
 #define min(a, b) (a < b ? a : b)
 #define max(a, b) (a > b ? a : b)
