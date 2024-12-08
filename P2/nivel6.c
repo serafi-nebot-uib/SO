@@ -96,21 +96,22 @@
 #define max(a, b) (a > b ? a : b)
 
 #define COMMAND_LINE_SIZE  1024
+// buffer global para leer y/o editar comandos
 char cmdbuff[COMMAND_LINE_SIZE] = {};
+// buffer global para almacenar una copia del comando introducido
 char linebuff[COMMAND_LINE_SIZE] = {};
 // buffer global para realizar las llamadas a getcwd() y cd avanzado
 char pathbuff[MAXPATHLEN] = {};
 
 // variable que indica si se esta esperando la introducción de un comando por parte del usuario
-// se utiliza imprimir saltos de linea en ciertos eventos (e.g. reaper)
+// se utiliza imprimir saltos de linea en ciertos casos (e.g. reaper/ctrlc/ctrlz)
 volatile bool cmdwait = false;
 
-#define ARGS_SEP "\t\n\r "
+#define ARGS_SEP "\t\n\r " // separadores de los tokens de comandos
 #define ARGS_SIZE 64
 char *args[ARGS_SIZE] = {};
 
 #define N_JOBS 64
-
 struct info_job {
     pid_t pid;
     char estado; // ‘N’, ’E’, ‘D’, ‘F’ (‘N’: Ninguno, ‘E’: Ejecutándose y ‘D’: Detenido, ‘F’: Finalizado)
@@ -118,8 +119,8 @@ struct info_job {
 };
 
 size_t n_job = 0;
-
 static struct info_job jobs_list[N_JOBS];
+
 static char mi_shell[COMMAND_LINE_SIZE];
 
 int internal_cd(char **args);
@@ -274,7 +275,7 @@ int internal_cd(char **args) {
         // cd sin ningun argumento -> cd al HOME
         case 0: {
                 if ((path = getenv("HOME")) == NULL) {
-                    ERRORSYS("no se ha podido obtener la variable de entorno HOME");
+                    ERRORSYS("getenv");
                     return -1;
                 }
             break;
@@ -349,7 +350,7 @@ int internal_export(char **args) {
         return -1;
     }
     if (setenv(name, value, 1) < 0) {
-        ERRORSYS("no se ha podido modificar la variable de entorno");
+        ERRORSYS("setenv");
         return -1;
     }
     DEBUG("internal_export() -> valor final \"%s\" = %s", name, getenv(name));
@@ -370,7 +371,7 @@ int internal_source(char **args) {
 
     FILE *file = fopen(path, "r");
     if (file == NULL) {
-        ERRORSYS("no se ha podido abrir el fichero");
+        ERRORSYS("fopen");
         return -1;
     }
 
@@ -383,7 +384,7 @@ int internal_source(char **args) {
     }
 
     if (fclose(file) != 0) {
-        ERRORSYS("no se ha podido cerrar el fichero");
+        ERRORSYS("fclose");
         return -1;
     }
 
@@ -415,14 +416,14 @@ int internal_fg(char **args) {
         return -1;
     }
     struct info_job *job = &jobs_list[pos];
+    struct info_job *fg_job = &jobs_list[0];
     if (job->estado == 'D') {
         kill(job->pid, SIGCONT);
         job->estado = 'E';
         DEBUG("internal_fg() -> señal SIGCONT enviada al proceso %d (%s)", job->pid, job->cmd);
     }
-    struct info_job *fg_job = &jobs_list[0];
 
-    // remove trailing " &" if it exists
+    // eliminar & final si existe
     char *ptrn = " &";
     int n = strlen(ptrn);
     char *end = job->cmd + strlen(job->cmd) - n;
@@ -459,7 +460,7 @@ int internal_bg(char **args) {
         return -1;
     }
     job->estado = 'E';
-    strcat(job->cmd, " &");
+    strcat(job->cmd, " &"); // añadir & al final del comando
     kill(job->pid, SIGCONT);
     DEBUG("internal_fg() -> señal SIGCONT enviada al proceso %d (%s)", job->pid, job->cmd);
     print_job_status(pos);
@@ -558,7 +559,7 @@ char *read_line(char *line) {
     cmdwait = false;
     if (s == NULL) {
         if (feof(stdin)) internal_exit(NULL);
-        if (ferror(stdin)) ERRORSYS("error de lectura de stdin");
+        if (ferror(stdin)) ERRORSYS("fgets");
         exit(1);
     }
     chrrep(s, '\n', 0);
@@ -573,6 +574,7 @@ char *read_line(char *line) {
 int check_internal(char **args) {
     if (args[0] == NULL) return 0;
     int size = min(sizeof(internal_cmd) / sizeof(*internal_cmd), sizeof(internal_fn) / sizeof(*internal_fn));
+    // iterar sobre la tabla de comandos internos; si el comando coincide con uno interno -> llamar a su función
     for (size_t i = 0; i < size; i++)
         if (strcmp(args[0], internal_cmd[i]) == 0)
             return internal_fn[i](args);
@@ -625,12 +627,10 @@ int is_output_redirection(char **args) {
             args[i] = NULL;
             int fd = open(args[i+1], O_CREAT | O_RDWR, 0644);
             if (fd < 0) {
-                ERRORSYS("no se ha podido abrir el archivo");
+                ERRORSYS("open");
             } else {
-                if (dup2(fd, STDOUT_FILENO) < 0)
-                    ERRORSYS("no se ha podido redireccionar stdout al archivo");
-                if (close(fd) < 0)
-                    ERRORSYS("no se ha podido cerrar el archivo");
+                if (dup2(fd, STDOUT_FILENO) < 0) ERRORSYS("dup2");
+                if (close(fd) < 0) ERRORSYS("close");
             }
             return 1;
         }
@@ -643,24 +643,27 @@ int is_output_redirection(char **args) {
  * @return 0 si todo está bien
  */
 int execute_line(char *line) {
+    // copiar line a linebuff para no modificar line
     strncpy(linebuff, line, COMMAND_LINE_SIZE);
     parse_args(args, linebuff);
     if (check_internal(args) > 0) {
         int background = is_background(args);
         pid_t pid = fork();
         if (pid < 0) {
-            ERRORSYS("no se ha podido crear un nuevo proceso");
+            ERRORSYS("fork");
             return -1;
         } else if (pid == 0) {
-            // child
+            // proceso hijo
+            // ignorar señales ctrlc/z
             signal(SIGINT, SIG_IGN);
             signal(SIGTSTP, SIG_IGN);
             is_output_redirection(args);
             execvp(args[0], args);
-            ERRORSYS("no se ha podido crear el nuevo proceso");
+            // si execvp devuelve la ejecución -> se ha generado un error
+            ERRORSYS("execvp");
             exit(-1);
         } else {
-            // parent
+            // proceso padre
             if (background) {
                 int pos = jobs_list_add(pid, 'E', line);
                 if (pos > 0) print_job_status(pos);
