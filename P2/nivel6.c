@@ -323,7 +323,7 @@ int internal_cd(char **args) {
     }
 
     if (chdir(path) < 0) {
-        ERRORSYS("no se ha podido cambiar de directorio");
+        ERRORSYS("chdir");
         return -1;
     }
 
@@ -481,7 +481,6 @@ int internal_exit(char **args) {
  */
 void reaper(int signum) {
     signal(SIGCHLD, reaper);
-    // if (cmdwait) printf("[%d] %s\n", getpid(), __func__);
     if (cmdwait) printf("\n");
     int status = 0;
     int pid = 0;
@@ -494,15 +493,12 @@ void reaper(int signum) {
             if (pos < 0) {
                 ERROR("no se ha encontrado el pid %d en la lista de procesos", pid);
             } else {
-                printf("proceso %d (%s) finalizado (%s) con el estado: %d\n", jobs_list[pos].pid, jobs_list[pos].cmd, signal_str(status), status);
+                printf("terminado PID %d (%s) en jobs_list[%d] con status %d (%s)\n", jobs_list[pos].pid, jobs_list[pos].cmd, pos, status, signal_str(status));
                 jobs_list_remove(pos);
             }
         }
     }
-    if (cmdwait) {
-        // printf("[%d] %-10s ", getpid(), __func__);
-        print_prompt();
-    }
+    if (cmdwait) print_prompt();
 }
 /**
  * Manejar la señal SIGINT.
@@ -510,7 +506,7 @@ void reaper(int signum) {
  * @return void
  */
 void ctrlc(int signum) {
-    // printf("%s\n", __func__);
+    signal(SIGINT, ctrlc);
     printf("\n");
     struct info_job job = jobs_list[0];
     if (job.pid > 0) {
@@ -523,10 +519,7 @@ void ctrlc(int signum) {
     } else {
         DEBUG("ctrlc() -> señal SIGTERM no enviada por %d (%s): no hay ningun proceso en foreground", getpid(), mi_shell);
     }
-    if (cmdwait) {
-        // printf("[%d] %-10s ", getpid(), __func__);
-        print_prompt();
-    }
+    if (cmdwait) print_prompt();
 }
 /**
  * Manejar la señal SIGTSTP.
@@ -534,7 +527,7 @@ void ctrlc(int signum) {
  * @return void
  */
 void ctrlz(int signum) {
-    // printf("[%d] %s\n", getpid(), __func__);
+    signal(SIGTSTP, ctrlz);
     printf("\n");
     struct info_job *job = &jobs_list[0];
     if (job->pid > 0) {
@@ -551,10 +544,7 @@ void ctrlz(int signum) {
     } else {
         DEBUG("señal SIGSTOP no enviada por %d (%s): no hay ningun proceso en foreground", getpid(), mi_shell);
     }
-    if (cmdwait) {
-        // printf("[%d] %-10s ", getpid(), __func__);
-        print_prompt();
-    }
+    if (cmdwait) print_prompt();
 }
 /**
  * Leer una línea de la entrada estándar.
@@ -562,7 +552,6 @@ void ctrlz(int signum) {
  * @return puntero a la línea leída
  */
 char *read_line(char *line) {
-    // printf("[%d] %-10s ", getpid(), __func__);
     print_prompt();
     cmdwait = true;
     char *s = fgets(line, COMMAND_LINE_SIZE, stdin);
@@ -681,7 +670,17 @@ int execute_line(char *line) {
                 strncpy(jobs_list[0].cmd, line, COMMAND_LINE_SIZE);
                 DEBUG("execute_line() -> pid padre: %d (%s)", getpid(), mi_shell);
                 DEBUG("execute_line() -> pid hijo: %d (%s)", pid, line);
+                // si el proceso hijo es el minishell -> ignorar señales ctrlc/z y que solo las procese el hijo
+                bool ignore_signal = strcmp(jobs_list[0].cmd, mi_shell) == 0;
+                if (ignore_signal) {
+                    signal(SIGINT, SIG_IGN);
+                    signal(SIGTSTP, SIG_IGN);
+                }
                 pause();
+                if (ignore_signal) {
+                    signal(SIGINT, ctrlc);
+                    signal(SIGTSTP, ctrlz);
+                }
             }
         }
     }
