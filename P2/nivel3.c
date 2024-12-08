@@ -82,7 +82,7 @@
 // Reset
 #define RST "\e[0m"
 
-#define DEBUGN3 0
+#define DEBUGN3 1
 
 #define DEBUG(...) { if (DEBUGN3) { fprintf(stderr, GRY "["); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "]" RST "\n"); }}
 #define ERROR(...) { fprintf(stderr, RED); fprintf(stderr, __VA_ARGS__); fprintf(stderr, RST "\n"); }
