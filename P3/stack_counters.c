@@ -13,20 +13,33 @@
 
 #define min(a,b) (a < b ? a : b)
 
+struct thread_opts {
+    unsigned long id;
+    struct my_stack *stack;
+    char *color;
+};
+
+struct thread_opts thread_args[THREAD_COUNT] = {};
 pthread_t threads[THREAD_COUNT] = {};
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
+char *colors[] = { MAG, CYN, GRY, YEL, BLU };
+#define COLORS_SIZE (sizeof(colors)/sizeof(*colors))
+
+#define THREAD_LOG_EN 0
+#define THREAD_LOG(opts, ...) { if (THREAD_LOG_EN) { printf("thread %s%lu " RST, opts.color, opts.id); printf(__VA_ARGS__); printf("\n" RST); }}
+
 void *worker(void *ptr) {
-    unsigned long id = (unsigned long) pthread_self();
     if (ptr != NULL) {
-        struct my_stack *stack = ptr;
+        struct thread_opts opts = *(struct thread_opts *)ptr;
+        opts.id = (unsigned long) pthread_self();
         for (size_t i = 0; i < ITERATION_COUNT; i++) {
             if (pthread_mutex_lock(&mutex) != 0) {
                 perror("mutex_lock");
                 continue;
             }
-            printf(BLU "thread %lu ejecutando pop\n" RST, id);
-            int *data = (int *)my_stack_pop(stack);
+            THREAD_LOG(opts, RED "pop");
+            int *data = (int *)my_stack_pop(opts.stack);
             if (pthread_mutex_unlock(&mutex) != 0) perror("mutex_unlock");
             if (data == NULL) pthread_exit(NULL); // TODO: print error
             *data += 1;
@@ -35,10 +48,10 @@ void *worker(void *ptr) {
                 perror("mutex_lock");
                 continue;
             }
-            printf("thread %lu ejecutando push\n", id);
-            if (my_stack_push(stack, data) < 0) {
-                printf("%lu failed to push item %lu\n", id, i);
-                pthread_exit(NULL); // TODO: print error
+            THREAD_LOG(opts, GRN "push");
+            if (my_stack_push(opts.stack, data) < 0) {
+                THREAD_LOG(opts, "failed to push item: %lu", i);
+                pthread_exit(NULL);
             }
             if (pthread_mutex_unlock(&mutex) != 0) perror("mutex_unlock");
         }
@@ -49,9 +62,8 @@ void *worker(void *ptr) {
 
 void stack_info(struct my_stack *stack) {
     struct my_stack_node *ptr = stack->top;
-    size_t i = 0;
     while (ptr != NULL) {
-        printf("%lu : %d\n", i++, *(int *) ptr->data);
+        printf("%d\n", *(int *) ptr->data);
         ptr = ptr->next;
     }
 }
@@ -62,7 +74,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    printf("threads: %d;iterations: %d\n", THREAD_COUNT, ITERATION_COUNT);
+    printf("threads: %d; iterations: %d\n", THREAD_COUNT, ITERATION_COUNT);
 
     struct my_stack *stack = NULL;
 
@@ -85,17 +97,21 @@ int main(int argc, char **argv) {
     }
 
     printf("new stack length: %d\n", my_stack_len(stack));
+    printf("original stack content:\n");
     stack_info(stack);
 
     for (size_t i = 0; i < THREAD_COUNT; i++) {
-        pthread_create(&threads[i], NULL, worker, stack);
-        printf(RED "[%lu] thread %lu created\n" RST, i, (unsigned long) threads[i]);
+        thread_args[i].stack = stack;
+        thread_args[i].color = colors[i%COLORS_SIZE];
+        pthread_create(&threads[i], NULL, worker, &thread_args[i]);
+        printf(RED "[%lu] thread %s%lu" RED " created\n" RST, i, thread_args[i].color, (unsigned long) threads[i]);
     }
     for (size_t i = 0; i < THREAD_COUNT; i++) {
         int *result;
         pthread_join(threads[i], (void **)&result);
     }
 
+    printf("stack content after threads iterations:\n");
     stack_info(stack);
 
     my_stack_write(stack, argv[1]);
