@@ -7,8 +7,8 @@
 #include "my_lib.h"
 #include "colors.h"
 
-#define ITERATION_COUNT 5
-#define THREAD_COUNT 3
+#define ITERATION_COUNT 1000000
+#define THREAD_COUNT 10
 #define DEFAULT_STACK_LEN THREAD_COUNT
 
 #define min(a,b) (a < b ? a : b)
@@ -21,22 +21,26 @@ void *worker(void *ptr) {
     if (ptr != NULL) {
         struct my_stack *stack = ptr;
         for (size_t i = 0; i < ITERATION_COUNT; i++) {
-            // if (pthread_mutex_lock(&mutex) != 0) {
-            //     perror("mutex_lock");
-            //     continue;
-            // }
-
+            if (pthread_mutex_lock(&mutex) != 0) {
+                perror("mutex_lock");
+                continue;
+            }
             printf(BLU "thread %lu ejecutando pop\n" RST, id);
             int *data = (int *)my_stack_pop(stack);
+            if (pthread_mutex_unlock(&mutex) != 0) perror("mutex_unlock");
             if (data == NULL) pthread_exit(NULL); // TODO: print error
             *data += 1;
+
+            if (pthread_mutex_lock(&mutex) != 0) {
+                perror("mutex_lock");
+                continue;
+            }
             printf("thread %lu ejecutando push\n", id);
             if (my_stack_push(stack, data) < 0) {
                 printf("%lu failed to push item %lu\n", id, i);
                 pthread_exit(NULL); // TODO: print error
             }
-
-            // if (pthread_mutex_unlock(&mutex) != 0) perror("mutex_unlock");
+            if (pthread_mutex_unlock(&mutex) != 0) perror("mutex_unlock");
         }
     }
     pthread_exit(NULL);
