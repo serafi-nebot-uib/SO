@@ -2,22 +2,24 @@
 
 #include <stdio.h>
 #include <pthread.h>
+#include <limits.h>
 #include <sys/stat.h>
 
 #include "my_lib.h"
+#include "colors.h"
 
 #define min(a,b) (a < b ? a : b)
 #define max(a,b) (a > b ? a : b)
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "error sintaxis; uso: ./reader <nombre_pila>\n");
+        fprintf(stderr, RED "error sintaxis; uso: ./reader <nombre_pila>\n" RST);
         return -1;
     }
 
     struct my_stack *stack = my_stack_read(argv[1]);
     if (stack == NULL) {
-        printf("pila %s no existe\n", argv[1]);
+        fprintf(stderr, RED "couldn't open stack file \"%s\"\n" RST, argv[1]);
         return 0;
     }
 
@@ -25,7 +27,7 @@ int main(int argc, char **argv) {
     int len = my_stack_len(stack);
     printf("stack length: %d\n", len);
 
-    int min_val = 0, max_val = 0;
+    int min_val = INT_MAX, max_val = 0;
     long sum = 0;
     while (ptr != NULL) {
         int value = *(int *)ptr->data;
