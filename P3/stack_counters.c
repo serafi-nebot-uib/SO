@@ -41,12 +41,13 @@ void *worker(void *ptr) {
     // asignar el id del thread a thread_opts
     opts.id = (unsigned long) pthread_self();
     for (size_t i = 0; i < ITERATION_COUNT; i++) {
+        // bloqueamos el mutex para hacer pop del stack
         if (pthread_mutex_lock(&mutex) != 0) {
             perror("mutex_lock");
             continue;
         }
         THREAD_LOG(opts, RED "pop");
-        int *data = (int *)my_stack_pop(opts.stack);
+        int *data = (int *)my_stack_pop(opts.stack); // obtener el primer elemento del stack
         if (pthread_mutex_unlock(&mutex) != 0) perror("mutex_unlock");
         if (data == NULL) {
             THREAD_LOG(opts, "no se ha podido obtener el valor del stack");
@@ -54,6 +55,7 @@ void *worker(void *ptr) {
         }
         *data += 1;
 
+        // bloqueamos el mutex para hacer push al stack
         if (pthread_mutex_lock(&mutex) != 0) {
             perror("mutex_lock");
             continue;
@@ -70,6 +72,7 @@ void *worker(void *ptr) {
 
 void stack_info(struct my_stack *stack) {
     struct my_stack_node *ptr = stack->top;
+    // iterar sobre el stack hasta llegar al último nodo
     while (ptr != NULL) {
         printf("%d\n", *(int *) ptr->data);
         ptr = ptr->next;
@@ -127,14 +130,14 @@ int main(int argc, char **argv) {
     }
     // esperar a que todos los threads terminen la ejecución
     for (size_t i = 0; i < THREAD_COUNT; i++) pthread_join(threads[i], NULL);
-    pthread_mutex_destroy(&mutex);
+    pthread_mutex_destroy(&mutex); // liberar mutex
 
     printf("\n");
     printf("stack content after threads iterations:\n");
     stack_info(stack);
     printf("stack length: %d\n", my_stack_len(stack));
 
-    my_stack_write(stack, argv[1]);
+    my_stack_write(stack, argv[1]); // escribir los cambios al archivo
     printf("written elements from stack to file: %d\n", my_stack_len(stack));
     printf("bytes liberados: %d\n", my_stack_purge(stack));
     printf("bye from main\n");
