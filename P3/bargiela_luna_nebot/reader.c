@@ -32,13 +32,14 @@ int main(int argc, char **argv) {
     long sum = 0;
     while (ptr != NULL) {
         int value = *(int *)ptr->data;
-        if (value == 0) break;
-        printf("%d\n", value);
-        sum += value;
-        min_val = min(min_val, value);
-        max_val = max(max_val, value);
+        if (value != 0) {
+            printf("%d\n", value);
+            sum += value;
+            min_val = min(min_val, value);
+            max_val = max(max_val, value);
+            cnt++;
+        }
         ptr = ptr->next;
-        cnt++;
     }
 
     int avg = sum / cnt;
