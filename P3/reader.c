@@ -25,21 +25,24 @@ int main(int argc, char **argv) {
 
     struct my_stack_node *ptr = stack->top;
     int len = my_stack_len(stack);
+    int cnt = 0;
     printf("stack length: %d\n", len);
 
     int min_val = INT_MAX, max_val = 0;
     long sum = 0;
     while (ptr != NULL) {
         int value = *(int *)ptr->data;
+        if (value == 0) break;
         printf("%d\n", value);
         sum += value;
         min_val = min(min_val, value);
         max_val = max(max_val, value);
         ptr = ptr->next;
+        cnt++;
     }
 
-    int avg = sum / len;
-    printf("\nitems: %d; sum: %ld; min: %d; max: %d; average: %d\n", len, sum, min_val, max_val, avg);
+    int avg = sum / cnt;
+    printf("\nitems: %d; sum: %ld; min: %d; max: %d; average: %d\n", cnt, sum, min_val, max_val, avg);
     my_stack_purge(stack);
 
     return 0;

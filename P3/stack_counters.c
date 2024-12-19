@@ -92,9 +92,9 @@ int main(int argc, char **argv) {
     if (stack == NULL) return -1;
 
     printf("stack->size: %d\n", stack->size);
-    printf("initial stack length: %d\n", my_stack_len(stack));
     printf("initial stack content:\n");
     stack_info(stack);
+    printf("initial stack length: %d\n", my_stack_len(stack));
 
     int len = my_stack_len(stack);
     if (len < DEFAULT_STACK_LEN) {
@@ -127,8 +127,9 @@ int main(int argc, char **argv) {
     }
     // esperar a que todos los threads terminen la ejecución
     for (size_t i = 0; i < THREAD_COUNT; i++) pthread_join(threads[i], NULL);
-    printf("\n");
+    pthread_mutex_destroy(&mutex);
 
+    printf("\n");
     printf("stack content after threads iterations:\n");
     stack_info(stack);
     printf("stack length: %d\n", my_stack_len(stack));
@@ -136,7 +137,7 @@ int main(int argc, char **argv) {
     my_stack_write(stack, argv[1]);
     printf("written elements from stack to file: %d\n", my_stack_len(stack));
     printf("bytes liberados: %d\n", my_stack_purge(stack));
-    printf("bye from main");
+    printf("bye from main\n");
     pthread_exit(NULL);
 
     return 0;
